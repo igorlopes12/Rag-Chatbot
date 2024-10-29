@@ -1,3 +1,25 @@
+'''This script implements a Streamlit-based application for interacting with documents using a chatbot interface.
+The application allows users to upload PDF files, processes the content into chunks, and stores them in a vector store.
+Users can then ask questions, and the application retrieves relevant context from the vector store to generate answers using a language model.
+Functions:
+    process_pdf(file):
+    load_existing_vector_store():
+            Chroma or None: The initialized vector store if the directory exists, otherwise `None`.
+    add_to_vector_store(chunks, vector_store=None):
+    ask_question(model, query, vector_store):
+Global Variables:
+    persist_directory (str): The directory where the vector store is persisted.
+    vector_store (Chroma or None): The loaded or newly created vector store.
+Streamlit Components:
+    st.set_page_config: Configures the Streamlit page with a title and icon.
+    st.header: Displays the main header of the application.
+    st.sidebar: Displays the sidebar for uploading documents and selecting the model.
+    st.file_uploader: Allows users to upload PDF files.
+    st.spinner: Displays a spinner while files are being uploaded.
+    st.selectbox: Allows users to select a language model from a dropdown.
+    st.chat_input: Displays an input box for users to ask questions.
+    st.chat_message: Displays chat messages in the chat interface.
+    '''
 import os
 import tempfile
 
@@ -20,6 +42,13 @@ persist_directory = 'db'
 
 
 def process_pdf(file):
+    """
+    Processes a PDF file and splits its content into chunks.
+    Args:
+        file (file-like object): The PDF file to be processed.
+    Returns:
+        list: A list of document chunks, where each chunk is a portion of the PDF content.
+    """
     with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
         temp_file.write(file.read())
         temp_file_path = temp_file.name
@@ -37,6 +66,18 @@ def process_pdf(file):
     return chunks
 
 def load_existing_vector_store():
+    """
+    Loads an existing vector store from the specified directory if it exists.
+
+    This function checks if the directory specified by `persist_directory` exists.
+    If it does, it initializes and returns a `Chroma` vector store using the 
+    `OpenAIEmbeddings` embedding function. If the directory does not exist, 
+    the function returns `None`.
+
+    Returns:
+        Chroma or None: The initialized vector store if the directory exists, 
+        otherwise `None`.
+    """
     if os.path.exists(os.path.join(persist_directory)):
         vector_store = Chroma(
             persist_directory=persist_directory,
@@ -46,6 +87,20 @@ def load_existing_vector_store():
     return None
 
 def add_to_vector_store(chunks, vector_store=None):
+    """
+    Adds document chunks to a vector store. If a vector store is provided, 
+    the chunks are added to it. Otherwise, a new vector store is created 
+    using the provided chunks.
+
+    Args:
+        chunks (list): A list of document chunks to be added to the vector store.
+        vector_store (optional): An existing vector store to which the chunks 
+                                 will be added. If not provided, a new vector 
+                                 store will be created.
+
+    Returns:
+        The updated or newly created vector store.
+    """
     if vector_store:
         vector_store.add_documents(chunks)
     else:
@@ -57,6 +112,15 @@ def add_to_vector_store(chunks, vector_store=None):
     return vector_store
 
 def ask_question(model, query, vector_store):
+    """
+    Asks a question using a language model and a vector store for context retrieval.
+    Args:
+        model (str): The name or identifier of the language model to use.
+        query (str): The question to be asked.
+        vector_store (VectorStore): The vector store used to retrieve relevant context.
+    Returns:
+        str: The answer to the question, formatted in markdown with visualizations if applicable.
+    """
     llm = ChatOpenAI(model=model)
     retriever = vector_store.as_retriever()
 
@@ -130,6 +194,7 @@ with st.sidebar:
             options=model_options,
     )
 
+# Chat History
 if 'messages' not in st.session_state:
     st.session_state['messages'] = []
 
@@ -142,11 +207,11 @@ if vector_store and question:
     st.chat_message('user').write(question)
     st.session_state.messages.append({'role': 'user', 'content': question})
 
-
-    response = ask_question(
-        model = selected_model,
-        query = question,
-        vector_store = vector_store,
+    with st.spinner('Searching for an answer...'):
+        response = ask_question(
+            model = selected_model,
+            query = question,
+            vector_store = vector_store,
     )
 
     st.chat_message('ai').write(response)
